@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>崩溃分析规则库</title>
+    <title>崩溃分析规则库 (Paddle.js 版)</title>
     <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
@@ -20,7 +20,8 @@
         .dot-yellow { background-color: #d29922; } 
         .dot-blue { background-color: #0969da; } 
         .dot-grey { background-color: #6e7781; }
-        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 9999; display: none; justify-content: center; align-items: center; flex-direction: column; }
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); z-index: 9999; display: none; justify-content: center; align-items: center; flex-direction: column; }
+        .ocr-preview { width: 100%; max-width: 300px; height: auto; object-fit: contain; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; display: none; margin-top: 10px;}
     </style>
 </head>
 <body>
@@ -35,10 +36,14 @@
         <div>
             <h4 class="mb-1"><i class="bi bi-bug-fill text-danger"></i> 崩溃分析规则库</h4>
             <small class="text-muted" id="connectionInfo">连接中...</small>
+            <span class="badge bg-info text-dark ms-2" style="font-size: 0.8em;">Paddle.js OCR</span>
         </div>
         <div class="d-flex gap-2">
             <button class="btn btn-outline-secondary" onclick="loadFromGitee()">
                 <i class="bi bi-arrow-clockwise"></i> 刷新
+            </button>
+            <button class="btn btn-outline-secondary" onclick="showStats()">
+                <i class="bi bi-bar-chart-line"></i> 统计
             </button>
             <button class="btn btn-primary" onclick="syncToGitee()">
                 <i class="bi bi-cloud-upload"></i> 保存并推送
@@ -68,8 +73,27 @@
                     </select>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label fw-bold">4. 结论/建议</label>
+                    <label class="form-label fw-bold">4. 分析结果</label>
                     <textarea class="form-control" id="analysisResult" rows="3"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">5. 图片文字识别 (PaddleOCR)</label>
+                    <input type="file" class="form-control" id="ocrFile" accept="image/*">
+                    <div class="mt-2 d-flex gap-3 flex-wrap align-items-start">
+                        <img id="ocrPreview" class="ocr-preview" alt="OCR 预览">
+                        <div class="d-flex flex-column gap-2 w-100">
+                            <div class="d-flex gap-2 flex-wrap mt-2">
+                                <button type="button" class="btn btn-primary btn-sm w-100" onclick="startOcr()">
+                                    <i class="bi bi-camera-fill"></i> 开始识别
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm w-100" onclick="fillKeywordsFromOcr()">
+                                    <i class="bi bi-arrow-up"></i> 填入堆栈关键字
+                                </button>
+                            </div>
+                            <small class="text-muted" id="ocrStatus">请选择图片后开始识别</small>
+                        </div>
+                    </div>
+                    <textarea class="form-control mt-2" id="ocrText" rows="5" placeholder="识别出的文字会显示在这里"></textarea>
                 </div>
                 <button class="btn btn-primary w-100" onclick="addIssue()">加入列表</button>
             </div>
@@ -80,7 +104,7 @@
                 <h5 class="mb-3 border-bottom pb-2">📋 规则列表 (<span id="issueCount">0</span>)</h5>
                 <div class="table-responsive flex-grow-1">
                     <table class="table table-hover align-middle" id="issueTable">
-                        <thead><tr class="table-light"><th>状态</th><th>任务</th><th>摘要</th><th style="width:50px"></th></tr></thead>
+                        <thead><tr class="table-light"><th>状态</th><th>上传状态</th><th>崩溃任务名</th><th>堆栈关键字</th><th style="width:90px"></th></tr></thead>
                         <tbody></tbody>
                     </table>
                     <div id="emptyTip" class="text-center py-5 text-muted">列表为空或正在加载...</div>
@@ -90,15 +114,93 @@
     </div>
 </div>
 
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">规则详情</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body"><div id="detailsContent" class="small"></div></div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="statsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">规则统计</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body"><div id="statsContent" class="small"></div></div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    // 从 jsdelivr 引入 ES Module 版本的 Paddle.js OCR
+    import * as ocr from 'https://cdn.jsdelivr.net/npm/@paddlejs-models/ocr@1.2.4/+esm';
+
+    let isModelLoaded = false;
+
+    // 将 startOcr 挂载到 window 对象，以便 HTML 按钮的 onclick 可以调用
+    window.startOcr = async function() {
+        const input = document.getElementById('ocrFile');
+        const file = input.files && input.files[0];
+        const preview = document.getElementById('ocrPreview');
+        
+        if (!file) return alert("请先选择图片");
+        
+        // 确保图片已经加载到 DOM 中
+        if(preview.style.display === 'none' || !preview.src) {
+            return alert("等待图片加载中，请稍后再试...");
+        }
+
+        toggleLoading(true, "准备 OCR 引擎...");
+        setOcrStatus('引擎初始化中...');
+
+        try {
+            // 1. 初始化模型 (仅第一次执行)
+            if (!isModelLoaded) {
+                toggleLoading(true, "正在下载模型 (约10MB)...");
+                await ocr.init();
+                isModelLoaded = true;
+                console.log('PaddleOCR Model Loaded');
+            }
+
+            // 2. 开始识别
+            toggleLoading(true, "正在识别文字...");
+            setOcrStatus('识别中...');
+            
+            // Paddle.js 直接识别 img 元素
+            const res = await ocr.recognize(preview);
+
+            // 3. 处理结果
+            // Paddle.js 的结果通常在 res.text 中
+            if (res && res.text) {
+                // 如果是数组则拼接，如果是字符串则直接使用
+                const textResult = Array.isArray(res.text) ? res.text.join('\n') : res.text;
+                document.getElementById('ocrText').value = textResult;
+                setOcrStatus('识别完成');
+            } else {
+                document.getElementById('ocrText').value = "未识别到文字";
+                setOcrStatus('未识别到内容');
+            }
+
+        } catch (e) {
+            console.error(e);
+            setOcrStatus('识别出错');
+            alert("PaddleOCR 错误: " + e.message + "\n(提示: 请使用 Chrome/Edge 浏览器并确保显卡驱动正常)");
+        } finally {
+            toggleLoading(false);
+        }
+    }
+</script>
+
 <script>
     // ==========================================
     // ⚠️ 必填配置区域
     // ==========================================
     const GITEE_CONFIG = {
-        owner: "think233",      // 填入 Gitee 用户名
-        repo:  "crash-db",      // 填入仓库名
+        owner: "think233",
+        repo:  "crash-db",
         path:  "known_issues.json",
-        token: "e431d4255e71a109a8a994d22ec7a748"     // 填入 Token
+        token: "e431d4255e71a109a8a994d22ec7a748"
     };
     // ==========================================
 
@@ -116,6 +218,7 @@
         document.getElementById('connectionInfo').innerText = 
             `数据源: Gitee/${GITEE_CONFIG.owner}/${GITEE_CONFIG.repo}`;
         loadFromGitee();
+        initOcr();
     });
 
     function utf8_to_b64(str) { return window.btoa(unescape(encodeURIComponent(str))); }
@@ -134,7 +237,10 @@
             const data = await res.json();
             const content = b64_to_utf8(data.content);
             const json = JSON.parse(content);
-            issuesData = json.issues || [];
+            issuesData = (json.issues || []).map((issue) => ({
+                ...issue,
+                uploaded: issue.uploaded !== undefined ? issue.uploaded : true
+            }));
             renderTable();
         } catch(e) {
             console.error(e);
@@ -175,6 +281,8 @@
             });
 
             if(!putRes.ok) throw new Error("保存失败");
+            issuesData = issuesData.map((issue) => ({ ...issue, uploaded: true }));
+            renderTable();
             alert("✅ 保存成功！");
         } catch(e) {
             alert("❌ " + e.message);
@@ -191,15 +299,84 @@
 
         issuesData.forEach((issue, index) => {
             const st = STATUS_MAP[issue.status] || STATUS_MAP.new;
+            const uploadText = issue.uploaded ? '已上传' : '未上传';
+            const keywords = Array.isArray(issue.stack_keywords) ? issue.stack_keywords.join(', ') : (issue.stack_keywords || '-');
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td><span class="status-dot ${st.class}"></span>${st.text}</td>
+                <td>${uploadText}</td>
                 <td><code class="text-dark fw-bold">${issue.task_name}</code></td>
-                <td class="text-truncate" style="max-width: 200px;">${issue.description || '-'}</td>
-                <td><button class="btn btn-sm text-danger border-0" onclick="deleteIssue(${index})"><i class="bi bi-trash"></i></button></td>
+                <td class="text-truncate" style="max-width: 200px;">${keywords || '-'}</td>
+                <td>
+                    <button class="btn btn-sm text-secondary border-0" onclick="showIssueDetails(${index})" title="详情">
+                        <i class="bi bi-card-text"></i>
+                    </button>
+                    <button class="btn btn-sm text-danger border-0" onclick="deleteIssue(${index})" title="删除">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
             `;
             tbody.appendChild(tr);
         });
+    }
+
+    function escapeHtml(text) {
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+        return String(text).replace(/[&<>"']/g, (m) => map[m]);
+    }
+
+    function formatKeywords(value) {
+        if (Array.isArray(value)) return value.join(', ');
+        return value || '-';
+    }
+
+    function showIssueDetails(index) {
+        const issue = issuesData[index];
+        if (!issue) return;
+        const st = STATUS_MAP[issue.status] || STATUS_MAP.new;
+        const uploadText = issue.uploaded ? '已上传' : '未上传';
+        const details = `
+            <div class="mb-2"><strong>崩溃任务名：</strong>${escapeHtml(issue.task_name || '-')}</div>
+            <div class="mb-2"><strong>堆栈关键字：</strong>${escapeHtml(formatKeywords(issue.stack_keywords))}</div>
+            <div class="mb-2"><strong>状态：</strong>${escapeHtml(st.text)}</div>
+            <div class="mb-2"><strong>上传状态：</strong>${uploadText}</div>
+            <div class="mb-2"><strong>分析结果：</strong>${escapeHtml(issue.description || '-')}</div>
+        `;
+        document.getElementById('detailsContent').innerHTML = details;
+        const modal = new bootstrap.Modal(document.getElementById('detailsModal'));
+        modal.show();
+    }
+
+    function showStats() {
+        const total = issuesData.length;
+        const statusCounts = {};
+        const uploadCounts = { uploaded: 0, pending: 0 };
+        issuesData.forEach((issue) => {
+            const statusKey = issue.status || 'new';
+            statusCounts[statusKey] = (statusCounts[statusKey] || 0) + 1;
+            if (issue.uploaded) uploadCounts.uploaded += 1;
+            else uploadCounts.pending += 1;
+        });
+        const statusLines = Object.keys(STATUS_MAP).map((key) => {
+            const label = STATUS_MAP[key].text;
+            const count = statusCounts[key] || 0;
+            return `<li>${escapeHtml(label)}：${count}</li>`;
+        }).join('');
+        const statsHtml = `
+            <div class="mb-3"><strong>总数：</strong>${total}</div>
+            <div class="mb-3"><strong>上传统计：</strong>
+                <ul class="mb-0">
+                    <li>已上传：${uploadCounts.uploaded}</li>
+                    <li>未上传：${uploadCounts.pending}</li>
+                </ul>
+            </div>
+            <div class="mb-3"><strong>状态统计：</strong>
+                <ul class="mb-0">${statusLines}</ul>
+            </div>
+        `;
+        document.getElementById('statsContent').innerHTML = statsHtml;
+        const modal = new bootstrap.Modal(document.getElementById('statsModal'));
+        modal.show();
     }
 
     function addIssue() {
@@ -209,7 +386,8 @@
             task_name: task,
             stack_keywords: document.getElementById('keywords').value.split(/,|，|\n/).map(s=>s.trim()).filter(s=>s),
             status: document.getElementById('statusSelect').value,
-            description: document.getElementById('analysisResult').value.trim()
+            description: document.getElementById('analysisResult').value.trim(),
+            uploaded: false
         });
         renderTable();
         document.getElementById('taskName').value = '';
@@ -225,6 +403,50 @@
         document.getElementById('loading').style.display = show ? 'flex' : 'none';
         if(text) document.getElementById('loadingText').innerText = text;
     }
+
+    function setOcrStatus(text) {
+        const el = document.getElementById('ocrStatus');
+        if (el) el.innerText = text;
+    }
+
+    function initOcr() {
+        const input = document.getElementById('ocrFile');
+        input.addEventListener('change', handleOcrFileChange);
+    }
+
+    function handleOcrFileChange() {
+        const input = document.getElementById('ocrFile');
+        const preview = document.getElementById('ocrPreview');
+        const file = input.files && input.files[0];
+        if (!file) {
+            preview.style.display = 'none';
+            preview.src = '';
+            setOcrStatus('请选择图片后开始识别');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            preview.src = reader.result;
+            preview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+        document.getElementById('ocrText').value = '';
+        setOcrStatus('已选择图片，点击开始识别');
+    }
+
+    function fillKeywordsFromOcr() {
+        const text = document.getElementById('ocrText').value.trim();
+        if (!text) return alert("没有可填入的识别内容");
+        
+        // 简单处理：将换行符转为逗号，并过滤掉太短的行
+        const keywords = text.split('\n')
+            .map(s => s.trim())
+            .filter(s => s.length > 3) 
+            .slice(0, 10); // 取前10个
+            
+        document.getElementById('keywords').value = keywords.join(', ');
+    }
 </script>
+<script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
