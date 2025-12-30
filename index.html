@@ -1,0 +1,245 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 崩溃分析控制台 (内部版)</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        :root { --accent: #24292f; --bg: #f6f8fa; }
+        body { font-family: "Segoe UI", sans-serif; background: var(--bg); padding-bottom: 60px; }
+        .page { max-width: 1200px; margin: 30px auto; padding: 0 20px; }
+        .glass-card { background: #ffffff; border: 1px solid #d0d7de; border-radius: 6px; box-shadow: 0 3px 6px rgba(140,149,159,0.15); padding: 25px; margin-bottom: 24px; }
+        .btn-primary { background-color: #1f883d; border-color: #1f883d; }
+        .btn-primary:hover { background-color: #1a7f37; border-color: #1a7f37; }
+        .form-control, .form-select { background-color: #f6f8fa; border: 1px solid #d0d7de; }
+        .form-control:focus { background-color: #fff; border-color: #0969da; box-shadow: 0 0 0 3px rgba(9,105,218,0.3); }
+        .status-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+        .dot-red { background-color: #cf222e; } 
+        .dot-yellow { background-color: #d29922; } 
+        .dot-blue { background-color: #0969da; } 
+        .dot-grey { background-color: #6e7781; }
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 9999; display: none; justify-content: center; align-items: center; flex-direction: column; }
+    </style>
+</head>
+<body>
+
+<div id="loading" class="loading-overlay">
+    <div class="spinner-border text-success" role="status"></div>
+    <div class="mt-2 fw-bold text-secondary" id="loadingText">通讯中...</div>
+</div>
+
+<div class="page">
+    <div class="glass-card d-flex justify-content-between align-items-center">
+        <div>
+            <h4 class="mb-1"><i class="bi bi-bug-fill text-danger"></i> 崩溃分析规则库</h4>
+            <small class="text-muted" id="connectionInfo">正在连接数据库...</small>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" onclick="loadFromGitee()">
+                <i class="bi bi-arrow-clockwise"></i> 刷新数据
+            </button>
+            <button class="btn btn-primary" onclick="syncToGitee()">
+                <i class="bi bi-cloud-upload"></i> 保存并推送
+            </button>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <div class="glass-card h-100">
+                <h5 class="mb-3 border-bottom pb-2">➕ 添加规则</h5>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">1. 崩溃任务名</label>
+                    <input type="text" class="form-control" id="taskName" placeholder="例如：wifi">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">2. 堆栈关键字</label>
+                    <textarea class="form-control" id="keywords" rows="3" placeholder="例如：wpa2_auth"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">3. 状态</label>
+                    <select class="form-select" id="statusSelect">
+                        <option value="unsolvable">🔴 无法解决</option>
+                        <option value="verifying">🟡 待验证</option>
+                        <option value="new" selected>🔵 待分析</option>
+                        <option value="cannot_analyze">⚪ 无法分析</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">4. 结论/建议</label>
+                    <textarea class="form-control" id="analysisResult" rows="3"></textarea>
+                </div>
+                <button class="btn btn-primary w-100" onclick="addIssue()">加入列表</button>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="glass-card h-100 d-flex flex-column">
+                <h5 class="mb-3 border-bottom pb-2">📋 规则列表 (<span id="issueCount">0</span>)</h5>
+                <div class="table-responsive flex-grow-1">
+                    <table class="table table-hover align-middle" id="issueTable">
+                        <thead><tr class="table-light"><th>状态</th><th>任务</th><th>摘要</th><th style="width:50px"></th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                    <div id="emptyTip" class="text-center py-5 text-muted">暂无数据，正在加载或列表为空...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // ⚠️ 配置区域：请在此处填入你的信息
+    // ==========================================
+    const GITEE_CONFIG = {
+        owner: "think233",     // 例如: "zhangsan"
+        repo:  "crash-db",         // 例如: "crash-data"
+        path:  "known_issues.json",      // 默认: "known_issues.json"
+        token: "e431d4255e71a109a8a994d22ec7a748"        // ⚠️ 必填，否则无法读写
+    };
+    // ==========================================
+
+    let issuesData = [];
+    const API_BASE = "https://gitee.com/api/v5/repos";
+    
+    const STATUS_MAP = {
+        unsolvable: { text: '无法解决', class: 'dot-red' },
+        verifying: { text: '待验证', class: 'dot-yellow' },
+        new: { text: '待分析', class: 'dot-blue' },
+        cannot_analyze: { text: '无法分析', class: 'dot-grey' }
+    };
+
+    // 初始化：页面加载即自动运行
+    document.addEventListener('DOMContentLoaded', () => {
+        // 更新界面上的连接信息
+        document.getElementById('connectionInfo').innerText = 
+            `已连接至: Gitee/${GITEE_CONFIG.owner}/${GITEE_CONFIG.repo}`;
+        
+        // 自动拉取数据
+        loadFromGitee();
+    });
+
+    // 中文 Base64 处理
+    function utf8_to_b64(str) { return window.btoa(unescape(encodeURIComponent(str))); }
+    function b64_to_utf8(str) { return decodeURIComponent(escape(window.atob(str))); }
+
+    // --- Gitee API 操作 (已改为使用 GITEE_CONFIG) ---
+    async function loadFromGitee() {
+        const { owner, repo, path, token } = GITEE_CONFIG;
+
+        if(!owner || !repo || !token) return alert("代码配置错误：请检查 HTML 文件中的 GITEE_CONFIG 信息是否填写完整。");
+
+        toggleLoading(true, "正在从 Gitee 同步...");
+        try {
+            const url = `${API_BASE}/${owner}/${repo}/contents/${path}?access_token=${token}&ref=master`;
+            const res = await fetch(url);
+            if(!res.ok) throw new Error("连接失败 (HTTP " + res.status + ")，请检查配置信息。");
+            
+            const data = await res.json();
+            const content = b64_to_utf8(data.content);
+            const json = JSON.parse(content);
+            issuesData = json.issues || [];
+            renderTable();
+        } catch(e) {
+            console.error(e);
+            alert("加载数据失败: " + e.message);
+        } finally {
+            toggleLoading(false);
+        }
+    }
+
+    async function syncToGitee() {
+        const { owner, repo, path, token } = GITEE_CONFIG;
+
+        toggleLoading(true, "正在保存到 Gitee...");
+        try {
+            // 1. 获取 sha (文件指纹，用于更新验证)
+            const getUrl = `${API_BASE}/${owner}/${repo}/contents/${path}?access_token=${token}`;
+            const getRes = await fetch(getUrl);
+            
+            let sha = "";
+            if (getRes.ok) {
+                const getData = await getRes.json();
+                sha = getData.sha;
+            }
+
+            // 2. 推送更新
+            const contentStr = JSON.stringify({ 
+                metadata: { updated_at: new Date().toISOString(), updated_by: "WebConsole" }, 
+                issues: issuesData 
+            }, null, 2);
+            
+            const body = {
+                access_token: token,
+                content: utf8_to_b64(contentStr),
+                message: "update known issues via console",
+                sha: sha
+            };
+
+            const putRes = await fetch(getUrl, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if(!putRes.ok) throw new Error("上传失败");
+            
+            alert("✅ 保存成功！");
+        } catch(e) {
+            alert("❌ 保存失败: " + e.message);
+        } finally {
+            toggleLoading(false);
+        }
+    }
+
+    // --- UI 逻辑 (保持不变) ---
+    function renderTable() {
+        const tbody = document.querySelector('#issueTable tbody');
+        document.getElementById('issueCount').textContent = issuesData.length;
+        tbody.innerHTML = '';
+        document.getElementById('emptyTip').style.display = issuesData.length ? 'none' : 'block';
+
+        issuesData.forEach((issue, index) => {
+            const st = STATUS_MAP[issue.status] || STATUS_MAP.new;
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><span class="status-dot ${st.class}"></span>${st.text}</td>
+                <td><code class="text-dark fw-bold">${issue.task_name}</code></td>
+                <td class="text-truncate" style="max-width: 200px;">${issue.description || '-'}</td>
+                <td><button class="btn btn-sm text-danger border-0" onclick="deleteIssue(${index})"><i class="bi bi-trash"></i></button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function addIssue() {
+        const task = document.getElementById('taskName').value.trim();
+        if(!task) return alert("请填写任务名");
+        
+        issuesData.unshift({
+            task_name: task,
+            stack_keywords: document.getElementById('keywords').value.split(/,|，|\n/).map(s=>s.trim()).filter(s=>s),
+            status: document.getElementById('statusSelect').value,
+            description: document.getElementById('analysisResult').value.trim()
+        });
+        renderTable();
+        document.getElementById('taskName').value = '';
+        document.getElementById('keywords').value = '';
+        document.getElementById('analysisResult').value = '';
+    }
+
+    function deleteIssue(index) {
+        if(confirm("确定删除？")) { issuesData.splice(index, 1); renderTable(); }
+    }
+
+    function toggleLoading(show, text) {
+        const el = document.getElementById('loading');
+        el.style.display = show ? 'flex' : 'none';
+        if(text) document.getElementById('loadingText').innerText = text;
+    }
+</script>
+</body>
+</html>
