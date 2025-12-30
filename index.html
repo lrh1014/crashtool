@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 崩溃分析控制台 (内部版)</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <title>崩溃分析规则库</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         :root { --accent: #24292f; --bg: #f6f8fa; }
         body { font-family: "Segoe UI", sans-serif; background: var(--bg); padding-bottom: 60px; }
@@ -34,11 +34,11 @@
     <div class="glass-card d-flex justify-content-between align-items-center">
         <div>
             <h4 class="mb-1"><i class="bi bi-bug-fill text-danger"></i> 崩溃分析规则库</h4>
-            <small class="text-muted" id="connectionInfo">正在连接数据库...</small>
+            <small class="text-muted" id="connectionInfo">连接中...</small>
         </div>
         <div class="d-flex gap-2">
             <button class="btn btn-outline-secondary" onclick="loadFromGitee()">
-                <i class="bi bi-arrow-clockwise"></i> 刷新数据
+                <i class="bi bi-arrow-clockwise"></i> 刷新
             </button>
             <button class="btn btn-primary" onclick="syncToGitee()">
                 <i class="bi bi-cloud-upload"></i> 保存并推送
@@ -83,7 +83,7 @@
                         <thead><tr class="table-light"><th>状态</th><th>任务</th><th>摘要</th><th style="width:50px"></th></tr></thead>
                         <tbody></tbody>
                     </table>
-                    <div id="emptyTip" class="text-center py-5 text-muted">暂无数据，正在加载或列表为空...</div>
+                    <div id="emptyTip" class="text-center py-5 text-muted">列表为空或正在加载...</div>
                 </div>
             </div>
         </div>
@@ -92,13 +92,13 @@
 
 <script>
     // ==========================================
-    // ⚠️ 配置区域：请在此处填入你的信息
+    // ⚠️ 必填配置区域
     // ==========================================
     const GITEE_CONFIG = {
-        owner: "think233",     // 例如: "zhangsan"
-        repo:  "crash-db",         // 例如: "crash-data"
-        path:  "known_issues.json",      // 默认: "known_issues.json"
-        token: "e431d4255e71a109a8a994d22ec7a748"        // ⚠️ 必填，否则无法读写
+        owner: "你的用户名",      // 填入 Gitee 用户名
+        repo:  "你的仓库名",      // 填入仓库名
+        path:  "known_issues.json",
+        token: "你的私人令牌"     // 填入 Token
     };
     // ==========================================
 
@@ -112,31 +112,24 @@
         cannot_analyze: { text: '无法分析', class: 'dot-grey' }
     };
 
-    // 初始化：页面加载即自动运行
     document.addEventListener('DOMContentLoaded', () => {
-        // 更新界面上的连接信息
         document.getElementById('connectionInfo').innerText = 
-            `已连接至: Gitee/${GITEE_CONFIG.owner}/${GITEE_CONFIG.repo}`;
-        
-        // 自动拉取数据
+            `数据源: Gitee/${GITEE_CONFIG.owner}/${GITEE_CONFIG.repo}`;
         loadFromGitee();
     });
 
-    // 中文 Base64 处理
     function utf8_to_b64(str) { return window.btoa(unescape(encodeURIComponent(str))); }
     function b64_to_utf8(str) { return decodeURIComponent(escape(window.atob(str))); }
 
-    // --- Gitee API 操作 (已改为使用 GITEE_CONFIG) ---
     async function loadFromGitee() {
         const { owner, repo, path, token } = GITEE_CONFIG;
+        if(!token) return alert("请在 HTML 代码中填入配置信息！");
 
-        if(!owner || !repo || !token) return alert("代码配置错误：请检查 HTML 文件中的 GITEE_CONFIG 信息是否填写完整。");
-
-        toggleLoading(true, "正在从 Gitee 同步...");
+        toggleLoading(true, "正在连接 Gitee...");
         try {
             const url = `${API_BASE}/${owner}/${repo}/contents/${path}?access_token=${token}&ref=master`;
             const res = await fetch(url);
-            if(!res.ok) throw new Error("连接失败 (HTTP " + res.status + ")，请检查配置信息。");
+            if(!res.ok) throw new Error("连接失败 " + res.status);
             
             const data = await res.json();
             const content = b64_to_utf8(data.content);
@@ -145,7 +138,7 @@
             renderTable();
         } catch(e) {
             console.error(e);
-            alert("加载数据失败: " + e.message);
+            alert("加载失败: " + e.message);
         } finally {
             toggleLoading(false);
         }
@@ -153,29 +146,25 @@
 
     async function syncToGitee() {
         const { owner, repo, path, token } = GITEE_CONFIG;
-
-        toggleLoading(true, "正在保存到 Gitee...");
+        toggleLoading(true, "正在保存...");
         try {
-            // 1. 获取 sha (文件指纹，用于更新验证)
             const getUrl = `${API_BASE}/${owner}/${repo}/contents/${path}?access_token=${token}`;
             const getRes = await fetch(getUrl);
-            
             let sha = "";
             if (getRes.ok) {
                 const getData = await getRes.json();
                 sha = getData.sha;
             }
 
-            // 2. 推送更新
             const contentStr = JSON.stringify({ 
-                metadata: { updated_at: new Date().toISOString(), updated_by: "WebConsole" }, 
+                metadata: { updated_at: new Date().toISOString() }, 
                 issues: issuesData 
             }, null, 2);
             
             const body = {
                 access_token: token,
                 content: utf8_to_b64(contentStr),
-                message: "update known issues via console",
+                message: "update via local tool",
                 sha: sha
             };
 
@@ -185,17 +174,15 @@
                 body: JSON.stringify(body)
             });
 
-            if(!putRes.ok) throw new Error("上传失败");
-            
+            if(!putRes.ok) throw new Error("保存失败");
             alert("✅ 保存成功！");
         } catch(e) {
-            alert("❌ 保存失败: " + e.message);
+            alert("❌ " + e.message);
         } finally {
             toggleLoading(false);
         }
     }
 
-    // --- UI 逻辑 (保持不变) ---
     function renderTable() {
         const tbody = document.querySelector('#issueTable tbody');
         document.getElementById('issueCount').textContent = issuesData.length;
@@ -218,7 +205,6 @@
     function addIssue() {
         const task = document.getElementById('taskName').value.trim();
         if(!task) return alert("请填写任务名");
-        
         issuesData.unshift({
             task_name: task,
             stack_keywords: document.getElementById('keywords').value.split(/,|，|\n/).map(s=>s.trim()).filter(s=>s),
@@ -236,8 +222,7 @@
     }
 
     function toggleLoading(show, text) {
-        const el = document.getElementById('loading');
-        el.style.display = show ? 'flex' : 'none';
+        document.getElementById('loading').style.display = show ? 'flex' : 'none';
         if(text) document.getElementById('loadingText').innerText = text;
     }
 </script>
