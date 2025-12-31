@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>崩溃分析规则库 (Paddle.js 版)</title>
+    <title>崩溃分析规则库 (修复版)</title>
     <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+
     <style>
         :root { --accent: #24292f; --bg: #f6f8fa; }
         body { font-family: "Segoe UI", sans-serif; background: var(--bg); padding-bottom: 60px; }
@@ -36,7 +38,7 @@
         <div>
             <h4 class="mb-1"><i class="bi bi-bug-fill text-danger"></i> 崩溃分析规则库</h4>
             <small class="text-muted" id="connectionInfo">连接中...</small>
-            <span class="badge bg-info text-dark ms-2" style="font-size: 0.8em;">Paddle.js OCR</span>
+            <span class="badge bg-success text-white ms-2" style="font-size: 0.8em;">Tesseract OCR</span>
         </div>
         <div class="d-flex gap-2">
             <button class="btn btn-outline-secondary" onclick="loadFromGitee()">
@@ -76,9 +78,11 @@
                     <label class="form-label fw-bold">4. 分析结果</label>
                     <textarea class="form-control" id="analysisResult" rows="3"></textarea>
                 </div>
+                
                 <div class="mb-3">
-                    <label class="form-label fw-bold">5. 图片文字识别 (PaddleOCR)</label>
+                    <label class="form-label fw-bold">5. 图片文字识别</label>
                     <input type="file" class="form-control" id="ocrFile" accept="image/*">
+                    
                     <div class="mt-2 d-flex gap-3 flex-wrap align-items-start">
                         <img id="ocrPreview" class="ocr-preview" alt="OCR 预览">
                         <div class="d-flex flex-column gap-2 w-100">
@@ -95,6 +99,7 @@
                     </div>
                     <textarea class="form-control mt-2" id="ocrText" rows="5" placeholder="识别出的文字会显示在这里"></textarea>
                 </div>
+
                 <button class="btn btn-primary w-100" onclick="addIssue()">加入列表</button>
             </div>
         </div>
@@ -132,75 +137,15 @@
     </div>
 </div>
 
-<script type="module">
-    // 从 jsdelivr 引入 ES Module 版本的 Paddle.js OCR
-    import * as ocr from 'https://cdn.jsdelivr.net/npm/@paddlejs-models/ocr@1.2.4/+esm';
-
-    let isModelLoaded = false;
-
-    // 将 startOcr 挂载到 window 对象，以便 HTML 按钮的 onclick 可以调用
-    window.startOcr = async function() {
-        const input = document.getElementById('ocrFile');
-        const file = input.files && input.files[0];
-        const preview = document.getElementById('ocrPreview');
-        
-        if (!file) return alert("请先选择图片");
-        
-        // 确保图片已经加载到 DOM 中
-        if(preview.style.display === 'none' || !preview.src) {
-            return alert("等待图片加载中，请稍后再试...");
-        }
-
-        toggleLoading(true, "准备 OCR 引擎...");
-        setOcrStatus('引擎初始化中...');
-
-        try {
-            // 1. 初始化模型 (仅第一次执行)
-            if (!isModelLoaded) {
-                toggleLoading(true, "正在下载模型 (约10MB)...");
-                await ocr.init();
-                isModelLoaded = true;
-                console.log('PaddleOCR Model Loaded');
-            }
-
-            // 2. 开始识别
-            toggleLoading(true, "正在识别文字...");
-            setOcrStatus('识别中...');
-            
-            // Paddle.js 直接识别 img 元素
-            const res = await ocr.recognize(preview);
-
-            // 3. 处理结果
-            // Paddle.js 的结果通常在 res.text 中
-            if (res && res.text) {
-                // 如果是数组则拼接，如果是字符串则直接使用
-                const textResult = Array.isArray(res.text) ? res.text.join('\n') : res.text;
-                document.getElementById('ocrText').value = textResult;
-                setOcrStatus('识别完成');
-            } else {
-                document.getElementById('ocrText').value = "未识别到文字";
-                setOcrStatus('未识别到内容');
-            }
-
-        } catch (e) {
-            console.error(e);
-            setOcrStatus('识别出错');
-            alert("PaddleOCR 错误: " + e.message + "\n(提示: 请使用 Chrome/Edge 浏览器并确保显卡驱动正常)");
-        } finally {
-            toggleLoading(false);
-        }
-    }
-</script>
-
 <script>
     // ==========================================
-    // ⚠️ 必填配置区域
+    // ⚠️ Gitee 配置区域 (请确认 Token 是否正确)
     // ==========================================
     const GITEE_CONFIG = {
         owner: "think233",
         repo:  "crash-db",
         path:  "known_issues.json",
-        token: "e431d4255e71a109a8a994d22ec7a748"
+        token: "e431d4255e71a109a8a994d22ec7a748" // 你的 Token
     };
     // ==========================================
 
@@ -214,19 +159,111 @@
         cannot_analyze: { text: '无法分析', class: 'dot-grey' }
     };
 
+    // 初始化加载
     document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('connectionInfo').innerText = 
             `数据源: Gitee/${GITEE_CONFIG.owner}/${GITEE_CONFIG.repo}`;
         loadFromGitee();
-        initOcr();
+        initOcrListeners();
     });
+
+    // --- OCR 功能 (使用 Tesseract.js) ---
+    
+    function initOcrListeners() {
+        const input = document.getElementById('ocrFile');
+        input.addEventListener('change', () => {
+            const preview = document.getElementById('ocrPreview');
+            const file = input.files && input.files[0];
+            if (!file) {
+                preview.style.display = 'none';
+                preview.src = '';
+                setOcrStatus('请选择图片后开始识别');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = () => {
+                preview.src = reader.result;
+                preview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+            document.getElementById('ocrText').value = '';
+            setOcrStatus('图片已加载，请点击开始识别');
+        });
+    }
+
+    async function startOcr() {
+        const input = document.getElementById('ocrFile');
+        const file = input.files && input.files[0];
+        
+        if (!file) return alert("请先选择图片");
+
+        toggleLoading(true, "正在初始化 OCR 引擎...");
+        setOcrStatus('引擎初始化中，首次使用需下载语言包...');
+
+        try {
+            // 使用 Tesseract 进行识别 ('chi_sim' = 简体中文, 'eng' = 英文)
+            const result = await Tesseract.recognize(
+                file, 
+                'chi_sim+eng', 
+                {
+                    logger: m => {
+                        // 实时更新状态
+                        if(m.status === 'recognizing text') {
+                            setOcrStatus(`识别中: ${(m.progress * 100).toFixed(0)}%`);
+                        } else {
+                            setOcrStatus(translateStatus(m.status));
+                        }
+                    }
+                }
+            );
+
+            const text = result.data.text;
+            document.getElementById('ocrText').value = text;
+            setOcrStatus('✅ 识别完成');
+            toggleLoading(false);
+
+        } catch (e) {
+            console.error(e);
+            toggleLoading(false);
+            setOcrStatus('❌ 识别出错');
+            alert("识别失败: " + e.message);
+        }
+    }
+
+    // 辅助函数：翻译 Tesseract 的状态信息
+    function translateStatus(status) {
+        if(status.includes('loading')) return '加载语言包...';
+        if(status.includes('initializing')) return '初始化引擎...';
+        return status;
+    }
+
+    function fillKeywordsFromOcr() {
+        const text = document.getElementById('ocrText').value.trim();
+        if (!text) return alert("没有可填入的识别内容");
+        
+        // 简单处理：按行分割，保留较长的行作为关键字推荐
+        const keywords = text.split('\n')
+            .map(s => s.trim().replace(/[^\w\._\-]/g, '')) // 只保留字母数字下划线点
+            .filter(s => s.length > 4) // 过滤太短的
+            .slice(0, 10); // 取前10个
+            
+        if(keywords.length === 0) return alert("未提取到有效的堆栈关键字");
+        document.getElementById('keywords').value = keywords.join(', ');
+    }
+
+    function setOcrStatus(text) {
+        const el = document.getElementById('ocrStatus');
+        if (el) el.innerText = text;
+    }
+
+    // --- Gitee 数据同步与逻辑 (保持原样) ---
 
     function utf8_to_b64(str) { return window.btoa(unescape(encodeURIComponent(str))); }
     function b64_to_utf8(str) { return decodeURIComponent(escape(window.atob(str))); }
 
     async function loadFromGitee() {
         const { owner, repo, path, token } = GITEE_CONFIG;
-        if(!token) return alert("请在 HTML 代码中填入配置信息！");
+        if(!token) return alert("请在代码中填入配置信息！");
 
         toggleLoading(true, "正在连接 Gitee...");
         try {
@@ -402,49 +439,6 @@
     function toggleLoading(show, text) {
         document.getElementById('loading').style.display = show ? 'flex' : 'none';
         if(text) document.getElementById('loadingText').innerText = text;
-    }
-
-    function setOcrStatus(text) {
-        const el = document.getElementById('ocrStatus');
-        if (el) el.innerText = text;
-    }
-
-    function initOcr() {
-        const input = document.getElementById('ocrFile');
-        input.addEventListener('change', handleOcrFileChange);
-    }
-
-    function handleOcrFileChange() {
-        const input = document.getElementById('ocrFile');
-        const preview = document.getElementById('ocrPreview');
-        const file = input.files && input.files[0];
-        if (!file) {
-            preview.style.display = 'none';
-            preview.src = '';
-            setOcrStatus('请选择图片后开始识别');
-            return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => {
-            preview.src = reader.result;
-            preview.style.display = 'block';
-        };
-        reader.readAsDataURL(file);
-        document.getElementById('ocrText').value = '';
-        setOcrStatus('已选择图片，点击开始识别');
-    }
-
-    function fillKeywordsFromOcr() {
-        const text = document.getElementById('ocrText').value.trim();
-        if (!text) return alert("没有可填入的识别内容");
-        
-        // 简单处理：将换行符转为逗号，并过滤掉太短的行
-        const keywords = text.split('\n')
-            .map(s => s.trim())
-            .filter(s => s.length > 3) 
-            .slice(0, 10); // 取前10个
-            
-        document.getElementById('keywords').value = keywords.join(', ');
     }
 </script>
 <script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
