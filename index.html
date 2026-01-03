@@ -1,497 +1,444 @@
 ﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>崩溃分析规则库 (PaddleOCR 纯前端版)</title>
-
-  <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.css" rel="stylesheet">
-
-  <style>
-    :root { --accent: #24292f; --bg: #f6f8fa; }
-    body { font-family: "Segoe UI", sans-serif; background: var(--bg); padding-bottom: 60px; }
-    .page { max-width: 1200px; margin: 30px auto; padding: 0 20px; }
-    .glass-card { background: #ffffff; border: 1px solid #d0d7de; border-radius: 6px; box-shadow: 0 3px 6px rgba(140,149,159,0.15); padding: 25px; margin-bottom: 24px; }
-    .btn-primary { background-color: #1f883d; border-color: #1f883d; }
-    .btn-primary:hover { background-color: #1a7f37; border-color: #1a7f37; }
-    .form-control, .form-select { background-color: #f6f8fa; border: 1px solid #d0d7de; }
-    .form-control:focus { background-color: #fff; border-color: #0969da; box-shadow: 0 0 0 3px rgba(9,105,218,0.3); }
-    .status-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
-    .dot-red { background-color: #cf222e; }
-    .dot-yellow { background-color: #d29922; }
-    .dot-blue { background-color: #0969da; }
-    .dot-grey { background-color: #6e7781; }
-    .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); z-index: 9999; display: none; justify-content: center; align-items: center; flex-direction: column; }
-    .ocr-preview { width: 100%; max-width: 300px; height: auto; object-fit: contain; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; display: none; margin-top: 10px;}
-    .badge-ocr { font-size: 0.8em; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>崩溃分析规则库</title>
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.bootcdn.net/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root { --accent: #24292f; --bg: #f6f8fa; }
+        body { font-family: "Segoe UI", sans-serif; background: var(--bg); padding-bottom: 60px; }
+        .page { max-width: 1200px; margin: 30px auto; padding: 0 20px; }
+        .glass-card { background: #ffffff; border: 1px solid #d0d7de; border-radius: 6px; box-shadow: 0 3px 6px rgba(140,149,159,0.15); padding: 25px; margin-bottom: 24px; }
+        .btn-primary { background-color: #1f883d; border-color: #1f883d; }
+        .btn-primary:hover { background-color: #1a7f37; border-color: #1a7f37; }
+        .form-control, .form-select { background-color: #f6f8fa; border: 1px solid #d0d7de; }
+        .form-control:focus { background-color: #fff; border-color: #0969da; box-shadow: 0 0 0 3px rgba(9,105,218,0.3); }
+        .status-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+        .dot-red { background-color: #cf222e; } 
+        .dot-yellow { background-color: #d29922; } 
+        .dot-blue { background-color: #0969da; } 
+        .dot-grey { background-color: #6e7781; }
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); z-index: 9999; display: none; justify-content: center; align-items: center; flex-direction: column; }
+        .ocr-preview { width: 180px; height: 120px; object-fit: contain; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; display: none; }
+    </style>
 </head>
-
 <body>
-  <div id="loading" class="loading-overlay">
+
+<div id="loading" class="loading-overlay">
     <div class="spinner-border text-success" role="status"></div>
     <div class="mt-2 fw-bold text-secondary" id="loadingText">通讯中...</div>
-  </div>
+</div>
 
-  <div class="page">
+<div class="page">
     <div class="glass-card d-flex justify-content-between align-items-center">
-      <div>
-        <h4 class="mb-1"><i class="bi bi-bug-fill text-danger"></i> 崩溃分析规则库</h4>
-        <small class="text-muted" id="connectionInfo">连接中...</small>
-        <span class="badge bg-success text-white ms-2 badge-ocr">PaddleOCR (PP-OCRv4) + ONNXRuntime-Web</span>
-      </div>
-      <div class="d-flex gap-2">
-        <button class="btn btn-outline-secondary" onclick="loadFromGitee()">
-          <i class="bi bi-arrow-clockwise"></i> 刷新
-        </button>
-        <button class="btn btn-outline-secondary" onclick="showStats()">
-          <i class="bi bi-bar-chart-line"></i> 统计
-        </button>
-        <button class="btn btn-primary" onclick="syncToGitee()">
-          <i class="bi bi-cloud-upload"></i> 保存并推送
-        </button>
-      </div>
+        <div>
+            <h4 class="mb-1"><i class="bi bi-bug-fill text-danger"></i> 崩溃分析规则库</h4>
+            <small class="text-muted" id="connectionInfo">连接中...</small>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" onclick="loadFromGitee()">
+                <i class="bi bi-arrow-clockwise"></i> 刷新
+            </button>
+            <button class="btn btn-outline-secondary" onclick="showStats()">
+                <i class="bi bi-bar-chart-line"></i> 统计
+            </button>
+            <button class="btn btn-primary" onclick="syncToGitee()">
+                <i class="bi bi-cloud-upload"></i> 保存并推送
+            </button>
+        </div>
     </div>
 
     <div class="row g-4">
-      <div class="col-lg-4">
-        <div class="glass-card h-100">
-          <h5 class="mb-3 border-bottom pb-2">➕ 添加规则</h5>
-          <div class="mb-3">
-            <label class="form-label fw-bold">1. 崩溃任务名</label>
-            <input type="text" class="form-control" id="taskName" placeholder="例如：wifi">
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-bold">2. 堆栈关键字</label>
-            <textarea class="form-control" id="keywords" rows="3" placeholder="例如：wpa2_auth"></textarea>
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-bold">3. 状态</label>
-            <select class="form-select" id="statusSelect">
-              <option value="unsolvable">🔴 无法解决</option>
-              <option value="verifying">🟡 待验证</option>
-              <option value="new" selected>🔵 待分析</option>
-              <option value="cannot_analyze">⚪ 无法分析</option>
-            </select>
-          </div>
-          <div class="mb-3">
-            <label class="form-label fw-bold">4. 分析结果</label>
-            <textarea class="form-control" id="analysisResult" rows="3"></textarea>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label fw-bold">5. 图片文字识别（纯前端 PaddleOCR）</label>
-            <input type="file" class="form-control" id="ocrFile" accept="image/*">
-
-            <div class="mt-2 d-flex gap-3 flex-wrap align-items-start">
-              <img id="ocrPreview" class="ocr-preview" alt="OCR 预览">
-              <div class="d-flex flex-column gap-2 w-100">
-                <div class="d-flex gap-2 flex-wrap mt-2">
-                  <button type="button" class="btn btn-primary btn-sm w-100" onclick="startOcr()">
-                    <i class="bi bi-camera-fill"></i> 开始识别
-                  </button>
-                  <button type="button" class="btn btn-outline-secondary btn-sm w-100" onclick="fillKeywordsFromOcr()">
-                    <i class="bi bi-arrow-up"></i> 填入堆栈关键字
-                  </button>
+        <div class="col-lg-4">
+            <div class="glass-card h-100">
+                <h5 class="mb-3 border-bottom pb-2">➕ 添加规则</h5>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">1. 崩溃任务名</label>
+                    <input type="text" class="form-control" id="taskName" placeholder="例如：wifi">
                 </div>
-                <small class="text-muted" id="ocrStatus">请选择图片后开始识别</small>
-              </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">2. 堆栈关键字</label>
+                    <textarea class="form-control" id="keywords" rows="3" placeholder="例如：wpa2_auth"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">3. 状态</label>
+                    <select class="form-select" id="statusSelect">
+                        <option value="unsolvable">🔴 无法解决</option>
+                        <option value="verifying">🟡 待验证</option>
+                        <option value="new" selected>🔵 待分析</option>
+                        <option value="cannot_analyze">⚪ 无法分析</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">4. 分析结果</label>
+                    <textarea class="form-control" id="analysisResult" rows="3"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">5. 图片文字识别（OCR）</label>
+                    <input type="file" class="form-control" id="ocrFile" accept="image/*">
+                    <div class="mt-2 d-flex gap-3 flex-wrap align-items-start">
+                        <img id="ocrPreview" class="ocr-preview" alt="OCR 预览">
+                        <div class="d-flex flex-column gap-2">
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="startOcr()">开始识别</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="fillKeywordsFromOcr()">填入堆栈关键字</button>
+                            </div>
+                            <small class="text-muted" id="ocrStatus">请选择图片后开始识别</small>
+                        </div>
+                    </div>
+                    <textarea class="form-control mt-2" id="ocrText" rows="5" placeholder="识别出的文字会显示在这里"></textarea>
+                </div>
+                <button class="btn btn-primary w-100" onclick="addIssue()">加入列表</button>
             </div>
-            <textarea class="form-control mt-2" id="ocrText" rows="5" placeholder="识别出的文字会显示在这里"></textarea>
-          </div>
-
-          <button class="btn btn-primary w-100" onclick="addIssue()">加入列表</button>
         </div>
-      </div>
 
-      <div class="col-lg-8">
-        <div class="glass-card h-100 d-flex flex-column">
-          <h5 class="mb-3 border-bottom pb-2">📋 规则列表 (<span id="issueCount">0</span>)</h5>
-          <div class="table-responsive flex-grow-1">
-            <table class="table table-hover align-middle" id="issueTable">
-              <thead>
-                <tr class="table-light">
-                  <th>状态</th>
-                  <th>上传状态</th>
-                  <th>崩溃任务名</th>
-                  <th>堆栈关键字</th>
-                  <th style="width:90px"></th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-            <div id="emptyTip" class="text-center py-5 text-muted">列表为空或正在加载...</div>
-          </div>
+        <div class="col-lg-8">
+            <div class="glass-card h-100 d-flex flex-column">
+                <h5 class="mb-3 border-bottom pb-2">📋 规则列表 (<span id="issueCount">0</span>)</h5>
+                <div class="table-responsive flex-grow-1">
+                    <table class="table table-hover align-middle" id="issueTable">
+                        <thead><tr class="table-light"><th>状态</th><th>上传状态</th><th>崩溃任务名</th><th>堆栈关键字</th><th style="width:90px"></th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                    <div id="emptyTip" class="text-center py-5 text-muted">列表为空或正在加载...</div>
+                </div>
+            </div>
         </div>
-      </div>
     </div>
-  </div>
+</div>
 
-  <div class="modal fade" id="detailsModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">规则详情</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">规则详情</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="detailsContent" class="small"></div>
+            </div>
         </div>
-        <div class="modal-body"><div id="detailsContent" class="small"></div></div>
-      </div>
     </div>
-  </div>
+</div>
 
-  <div class="modal fade" id="statsModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="statsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">规则统计</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">规则统计</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="statsContent" class="small"></div>
+            </div>
         </div>
-        <div class="modal-body"><div id="statsContent" class="small"></div></div>
-      </div>
     </div>
-  </div>
+</div>
 
-  <script>
+<script>
     // ==========================================
-    // ⚠️ Gitee 配置区域（建议不要把 Token 写死在前端！）
+    // ⚠️ 必填配置区域
     // ==========================================
     const GITEE_CONFIG = {
-      owner: "think233",
-      repo:  "crash-db",
-      path:  "known_issues.json",
-      token: "e431d4255e71a109a8a994d22ec7a748"
+        owner: "think233",      // 填入 Gitee 用户名
+        repo:  "crash-db",      // 填入仓库名
+        path:  "known_issues.json",
+        token: "e431d4255e71a109a8a994d22ec7a748"     // 填入 Token
     };
+    
+    // EasyOCR 免费 API 配置（国内线路）
+    const EASYOCR_ENDPOINT = "https://cn-api.easyocr.org/ocr";
     // ==========================================
 
     let issuesData = [];
     const API_BASE = "https://gitee.com/api/v5/repos";
-
+    
     const STATUS_MAP = {
-      unsolvable: { text: '无法解决', class: 'dot-red' },
-      verifying: { text: '待验证', class: 'dot-yellow' },
-      new: { text: '待分析', class: 'dot-blue' },
-      cannot_analyze: { text: '无法分析', class: 'dot-grey' }
+        unsolvable: { text: '无法解决', class: 'dot-red' },
+        verifying: { text: '待验证', class: 'dot-yellow' },
+        new: { text: '待分析', class: 'dot-blue' },
+        cannot_analyze: { text: '无法分析', class: 'dot-grey' }
     };
 
     document.addEventListener('DOMContentLoaded', () => {
-      document.getElementById('connectionInfo').innerText =
-        `数据源: Gitee/${GITEE_CONFIG.owner}/${GITEE_CONFIG.repo}`;
-      loadFromGitee();
-      initOcrListeners();
+        document.getElementById('connectionInfo').innerText = 
+            `数据源: Gitee/${GITEE_CONFIG.owner}/${GITEE_CONFIG.repo}`;
+        loadFromGitee();
+        initOcr();
     });
 
-    // ---------- OCR: 仅做 UI/图片预览（引擎逻辑在 module 里） ----------
-    function initOcrListeners() {
-      const input = document.getElementById('ocrFile');
-      input.addEventListener('change', () => {
-        const preview = document.getElementById('ocrPreview');
-        const file = input.files && input.files[0];
-        if (!file) {
-          preview.style.display = 'none';
-          preview.src = '';
-          setOcrStatus('请选择图片后开始识别');
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => {
-          preview.src = reader.result;
-          preview.style.display = 'block';
-        };
-        reader.readAsDataURL(file);
-        document.getElementById('ocrText').value = '';
-        setOcrStatus('图片已加载，请点击开始识别');
-      });
-    }
-
-    function setOcrStatus(text) {
-      const el = document.getElementById('ocrStatus');
-      if (el) el.innerText = text;
-    }
-
-    function fillKeywordsFromOcr() {
-      const text = document.getElementById('ocrText').value.trim();
-      if (!text) return alert("没有可填入的识别内容");
-
-      const keywords = text.split('\n')
-        .map(s => s.trim().replace(/[^\w\._\-]/g, ''))
-        .filter(s => s.length > 4)
-        .slice(0, 10);
-
-      if (keywords.length === 0) return alert("未提取到有效的堆栈关键字");
-      document.getElementById('keywords').value = keywords.join(', ');
-    }
-
-    // ---------- Gitee 同步 ----------
     function utf8_to_b64(str) { return window.btoa(unescape(encodeURIComponent(str))); }
     function b64_to_utf8(str) { return decodeURIComponent(escape(window.atob(str))); }
 
     async function loadFromGitee() {
-      const { owner, repo, path, token } = GITEE_CONFIG;
-      if(!token) return alert("请在代码中填入配置信息！");
+        const { owner, repo, path, token } = GITEE_CONFIG;
+        if(!token) return alert("请在 HTML 代码中填入配置信息！");
 
-      toggleLoading(true, "正在连接 Gitee...");
-      try {
-        const url = `${API_BASE}/${owner}/${repo}/contents/${path}?access_token=${token}&ref=master`;
-        const res = await fetch(url);
-        if(!res.ok) throw new Error("连接失败 " + res.status);
-
-        const data = await res.json();
-        const content = b64_to_utf8(data.content);
-        const json = JSON.parse(content);
-        issuesData = (json.issues || []).map((issue) => ({
-          ...issue,
-          uploaded: issue.uploaded !== undefined ? issue.uploaded : true
-        }));
-        renderTable();
-      } catch(e) {
-        console.error(e);
-        alert("加载失败: " + e.message);
-      } finally {
-        toggleLoading(false);
-      }
+        toggleLoading(true, "正在连接 Gitee...");
+        try {
+            const url = `${API_BASE}/${owner}/${repo}/contents/${path}?access_token=${token}&ref=master`;
+            const res = await fetch(url);
+            if(!res.ok) throw new Error("连接失败 " + res.status);
+            
+            const data = await res.json();
+            const content = b64_to_utf8(data.content);
+            const json = JSON.parse(content);
+            issuesData = (json.issues || []).map((issue) => ({
+                ...issue,
+                uploaded: issue.uploaded !== undefined ? issue.uploaded : true
+            }));
+            renderTable();
+        } catch(e) {
+            console.error(e);
+            alert("加载失败: " + e.message);
+        } finally {
+            toggleLoading(false);
+        }
     }
 
     async function syncToGitee() {
-      const { owner, repo, path, token } = GITEE_CONFIG;
-      toggleLoading(true, "正在保存...");
-      try {
-        const getUrl = `${API_BASE}/${owner}/${repo}/contents/${path}?access_token=${token}`;
-        const getRes = await fetch(getUrl);
-        let sha = "";
-        if (getRes.ok) {
-          const getData = await getRes.json();
-          sha = getData.sha;
+        const { owner, repo, path, token } = GITEE_CONFIG;
+        toggleLoading(true, "正在保存...");
+        try {
+            const getUrl = `${API_BASE}/${owner}/${repo}/contents/${path}?access_token=${token}`;
+            const getRes = await fetch(getUrl);
+            let sha = "";
+            if (getRes.ok) {
+                const getData = await getRes.json();
+                sha = getData.sha;
+            }
+
+            const contentStr = JSON.stringify({ 
+                metadata: { updated_at: new Date().toISOString() }, 
+                issues: issuesData 
+            }, null, 2);
+            
+            const body = {
+                access_token: token,
+                content: utf8_to_b64(contentStr),
+                message: "update via local tool",
+                sha: sha
+            };
+
+            const putRes = await fetch(getUrl, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if(!putRes.ok) throw new Error("保存失败");
+            issuesData = issuesData.map((issue) => ({ ...issue, uploaded: true }));
+            renderTable();
+            alert("✅ 保存成功！");
+        } catch(e) {
+            alert("❌ " + e.message);
+        } finally {
+            toggleLoading(false);
         }
-
-        const contentStr = JSON.stringify({
-          metadata: { updated_at: new Date().toISOString() },
-          issues: issuesData
-        }, null, 2);
-
-        const body = {
-          access_token: token,
-          content: utf8_to_b64(contentStr),
-          message: "update via local tool",
-          sha: sha
-        };
-
-        const putRes = await fetch(getUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
-        });
-
-        if(!putRes.ok) throw new Error("保存失败");
-        issuesData = issuesData.map((issue) => ({ ...issue, uploaded: true }));
-        renderTable();
-        alert("✅ 保存成功！");
-      } catch(e) {
-        alert("❌ " + e.message);
-      } finally {
-        toggleLoading(false);
-      }
     }
 
     function renderTable() {
-      const tbody = document.querySelector('#issueTable tbody');
-      document.getElementById('issueCount').textContent = issuesData.length;
-      tbody.innerHTML = '';
-      document.getElementById('emptyTip').style.display = issuesData.length ? 'none' : 'block';
+        const tbody = document.querySelector('#issueTable tbody');
+        document.getElementById('issueCount').textContent = issuesData.length;
+        tbody.innerHTML = '';
+        document.getElementById('emptyTip').style.display = issuesData.length ? 'none' : 'block';
 
-      issuesData.forEach((issue, index) => {
-        const st = STATUS_MAP[issue.status] || STATUS_MAP.new;
-        const uploadText = issue.uploaded ? '已上传' : '未上传';
-        const keywords = Array.isArray(issue.stack_keywords) ? issue.stack_keywords.join(', ') : (issue.stack_keywords || '-');
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td><span class="status-dot ${st.class}"></span>${st.text}</td>
-          <td>${uploadText}</td>
-          <td><code class="text-dark fw-bold">${issue.task_name}</code></td>
-          <td class="text-truncate" style="max-width: 200px;">${keywords || '-'}</td>
-          <td>
-            <button class="btn btn-sm text-secondary border-0" onclick="showIssueDetails(${index})" title="详情">
-              <i class="bi bi-card-text"></i>
-            </button>
-            <button class="btn btn-sm text-danger border-0" onclick="deleteIssue(${index})" title="删除">
-              <i class="bi bi-trash"></i>
-            </button>
-          </td>
-        `;
-        tbody.appendChild(tr);
-      });
+        issuesData.forEach((issue, index) => {
+            const st = STATUS_MAP[issue.status] || STATUS_MAP.new;
+            const uploadText = issue.uploaded ? '已上传' : '未上传';
+            const keywords = Array.isArray(issue.stack_keywords) ? issue.stack_keywords.join(', ') : (issue.stack_keywords || '-');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><span class="status-dot ${st.class}"></span>${st.text}</td>
+                <td>${uploadText}</td>
+                <td><code class="text-dark fw-bold">${issue.task_name}</code></td>
+                <td class="text-truncate" style="max-width: 200px;">${keywords || '-'}</td>
+                <td>
+                    <button class="btn btn-sm text-secondary border-0" onclick="showIssueDetails(${index})" title="详情">
+                        <i class="bi bi-card-text"></i>
+                    </button>
+                    <button class="btn btn-sm text-danger border-0" onclick="deleteIssue(${index})" title="删除">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
     }
 
     function escapeHtml(text) {
-      const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-      return String(text).replace(/[&<>"']/g, (m) => map[m]);
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+        return String(text).replace(/[&<>"']/g, (m) => map[m]);
     }
 
     function formatKeywords(value) {
-      if (Array.isArray(value)) return value.join(', ');
-      return value || '-';
+        if (Array.isArray(value)) return value.join(', ');
+        return value || '-';
     }
 
     function showIssueDetails(index) {
-      const issue = issuesData[index];
-      if (!issue) return;
-      const st = STATUS_MAP[issue.status] || STATUS_MAP.new;
-      const uploadText = issue.uploaded ? '已上传' : '未上传';
-      const details = `
-        <div class="mb-2"><strong>崩溃任务名：</strong>${escapeHtml(issue.task_name || '-')}</div>
-        <div class="mb-2"><strong>堆栈关键字：</strong>${escapeHtml(formatKeywords(issue.stack_keywords))}</div>
-        <div class="mb-2"><strong>状态：</strong>${escapeHtml(st.text)}</div>
-        <div class="mb-2"><strong>上传状态：</strong>${uploadText}</div>
-        <div class="mb-2"><strong>分析结果：</strong>${escapeHtml(issue.description || '-')}</div>
-      `;
-      document.getElementById('detailsContent').innerHTML = details;
-      const modal = new bootstrap.Modal(document.getElementById('detailsModal'));
-      modal.show();
+        const issue = issuesData[index];
+        if (!issue) return;
+        const st = STATUS_MAP[issue.status] || STATUS_MAP.new;
+        const uploadText = issue.uploaded ? '已上传' : '未上传';
+        const details = `
+            <div class="mb-2"><strong>崩溃任务名：</strong>${escapeHtml(issue.task_name || '-')}</div>
+            <div class="mb-2"><strong>堆栈关键字：</strong>${escapeHtml(formatKeywords(issue.stack_keywords))}</div>
+            <div class="mb-2"><strong>状态：</strong>${escapeHtml(st.text)}</div>
+            <div class="mb-2"><strong>上传状态：</strong>${uploadText}</div>
+            <div class="mb-2"><strong>分析结果：</strong>${escapeHtml(issue.description || '-')}</div>
+        `;
+        document.getElementById('detailsContent').innerHTML = details;
+        const modal = new bootstrap.Modal(document.getElementById('detailsModal'));
+        modal.show();
     }
 
     function showStats() {
-      const total = issuesData.length;
-      const statusCounts = {};
-      const uploadCounts = { uploaded: 0, pending: 0 };
-      issuesData.forEach((issue) => {
-        const statusKey = issue.status || 'new';
-        statusCounts[statusKey] = (statusCounts[statusKey] || 0) + 1;
-        if (issue.uploaded) uploadCounts.uploaded += 1;
-        else uploadCounts.pending += 1;
-      });
-      const statusLines = Object.keys(STATUS_MAP).map((key) => {
-        const label = STATUS_MAP[key].text;
-        const count = statusCounts[key] || 0;
-        return `<li>${escapeHtml(label)}：${count}</li>`;
-      }).join('');
-      const statsHtml = `
-        <div class="mb-3"><strong>总数：</strong>${total}</div>
-        <div class="mb-3"><strong>上传统计：</strong>
-          <ul class="mb-0">
-            <li>已上传：${uploadCounts.uploaded}</li>
-            <li>未上传：${uploadCounts.pending}</li>
-          </ul>
-        </div>
-        <div class="mb-3"><strong>状态统计：</strong>
-          <ul class="mb-0">${statusLines}</ul>
-        </div>
-      `;
-      document.getElementById('statsContent').innerHTML = statsHtml;
-      const modal = new bootstrap.Modal(document.getElementById('statsModal'));
-      modal.show();
+        const total = issuesData.length;
+        const statusCounts = {};
+        const uploadCounts = { uploaded: 0, pending: 0 };
+        issuesData.forEach((issue) => {
+            const statusKey = issue.status || 'new';
+            statusCounts[statusKey] = (statusCounts[statusKey] || 0) + 1;
+            if (issue.uploaded) uploadCounts.uploaded += 1;
+            else uploadCounts.pending += 1;
+        });
+        const statusLines = Object.keys(STATUS_MAP).map((key) => {
+            const label = STATUS_MAP[key].text;
+            const count = statusCounts[key] || 0;
+            return `<li>${escapeHtml(label)}：${count}</li>`;
+        }).join('');
+        const statsHtml = `
+            <div class="mb-3"><strong>总数：</strong>${total}</div>
+            <div class="mb-3"><strong>上传统计：</strong>
+                <ul class="mb-0">
+                    <li>已上传：${uploadCounts.uploaded}</li>
+                    <li>未上传：${uploadCounts.pending}</li>
+                </ul>
+            </div>
+            <div class="mb-3"><strong>状态统计：</strong>
+                <ul class="mb-0">${statusLines}</ul>
+            </div>
+        `;
+        document.getElementById('statsContent').innerHTML = statsHtml;
+        const modal = new bootstrap.Modal(document.getElementById('statsModal'));
+        modal.show();
     }
 
     function addIssue() {
-      const task = document.getElementById('taskName').value.trim();
-      if(!task) return alert("请填写任务名");
-      issuesData.unshift({
-        task_name: task,
-        stack_keywords: document.getElementById('keywords').value.split(/,|，|\n/).map(s=>s.trim()).filter(s=>s),
-        status: document.getElementById('statusSelect').value,
-        description: document.getElementById('analysisResult').value.trim(),
-        uploaded: false
-      });
-      renderTable();
-      document.getElementById('taskName').value = '';
-      document.getElementById('keywords').value = '';
-      document.getElementById('analysisResult').value = '';
+        const task = document.getElementById('taskName').value.trim();
+        if(!task) return alert("请填写任务名");
+        issuesData.unshift({
+            task_name: task,
+            stack_keywords: document.getElementById('keywords').value.split(/,|，|\n/).map(s=>s.trim()).filter(s=>s),
+            status: document.getElementById('statusSelect').value,
+            description: document.getElementById('analysisResult').value.trim(),
+            uploaded: false
+        });
+        renderTable();
+        document.getElementById('taskName').value = '';
+        document.getElementById('keywords').value = '';
+        document.getElementById('analysisResult').value = '';
     }
 
     function deleteIssue(index) {
-      if(confirm("确定删除？")) { issuesData.splice(index, 1); renderTable(); }
+        if(confirm("确定删除？")) { issuesData.splice(index, 1); renderTable(); }
     }
 
     function toggleLoading(show, text) {
-      document.getElementById('loading').style.display = show ? 'flex' : 'none';
-      if(text) document.getElementById('loadingText').innerText = text;
+        document.getElementById('loading').style.display = show ? 'flex' : 'none';
+        if(text) document.getElementById('loadingText').innerText = text;
     }
-  </script>
-
-  <!-- ✅ 关键：用 ESM 模块加载 PaddleOCR(ONNX) 方案 -->
-  <script type="module">
-    // 使用 esm.sh：自动把 npm 包及其依赖(含 onnxruntime-web)打包成浏览器可用的 ESM
-    import * as ort from "https://esm.sh/onnxruntime-web@1.20.1";
-    import Ocr from "https://esm.sh/@gutenye/ocr-browser@1.4.8";
-
-    // 让底层 wasm 文件从 CDN 找到（否则可能 404）
-    // 官方也建议在生产环境明确指定 wasmPaths
-    ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
-
-    // 以防某些依赖使用 globalThis.ort
-    globalThis.ort = ort;
-
-    // PP-OCRv4 模型（来自 @gutenye/ocr-models 的 assets 列表）
-    const MODEL_BASE = "https://cdn.jsdelivr.net/npm/@gutenye/ocr-models@1.4.2/assets/";
-    const MODELS = {
-      detectionPath:   MODEL_BASE + "ch_PP-OCRv4_det_infer.onnx",
-      recognitionPath: MODEL_BASE + "ch_PP-OCRv4_rec_infer.onnx",
-      dictionaryPath:  MODEL_BASE + "ppocr_keys_v1.txt"
-    };
-
-    let ocrInstance = null;
 
     function setOcrStatus(text) {
-      const el = document.getElementById('ocrStatus');
-      if (el) el.innerText = text;
-    }
-    function toggleLoading(show, text) {
-      document.getElementById('loading').style.display = show ? 'flex' : 'none';
-      if(text) document.getElementById('loadingText').innerText = text;
+        const el = document.getElementById('ocrStatus');
+        if (el) el.innerText = text;
     }
 
-    async function ensureOcr() {
-      if (ocrInstance) return ocrInstance;
+    function initOcr() {
+        const input = document.getElementById('ocrFile');
+        input.addEventListener('change', handleOcrFileChange);
+    }
 
-      toggleLoading(true, "正在初始化 PaddleOCR 引擎...");
-      setOcrStatus("引擎初始化中（首次会下载模型与 wasm）...");
+    function handleOcrFileChange() {
+        const input = document.getElementById('ocrFile');
+        const preview = document.getElementById('ocrPreview');
+        const file = input.files && input.files[0];
+        if (!file) {
+            preview.style.display = 'none';
+            preview.src = '';
+            setOcrStatus('请选择图片后开始识别');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            preview.src = reader.result;
+            preview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+        document.getElementById('ocrText').value = '';
+        setOcrStatus('已选择图片，点击开始识别');
+    }
 
-      try {
-        // 依据库的 Browser API：Ocr.create({ models: { detectionPath, recognitionPath, dictionaryPath } })
-        // 然后 ocr.detect(imagePath 或 {data,width,height})
-        ocrInstance = await Ocr.create({
-          models: MODELS,
-          isDebug: false
+    async function startOcr() {
+        const input = document.getElementById('ocrFile');
+        const file = input.files && input.files[0];
+        if (!file) return alert("请先选择图片");
+        
+        toggleLoading(true, "EasyOCR 识别中...");
+        setOcrStatus('正在识别...');
+        
+        try {
+            const form = new FormData();
+            form.append("file", file);
+
+            // 调用 EasyOCR
+            const response = await fetch(EASYOCR_ENDPOINT, {
+                method: 'POST',
+                body: form
+            });
+            
+            if (!response.ok) {
+                throw new Error(`服务响应错误: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            
+            const words = Array.isArray(result.words) ? result.words : [];
+            const text = words.map((w) => (w && w.text ? String(w.text).trim() : ""))
+                .filter((t) => t)
+                .join("\n")
+                .trim();
+            document.getElementById('ocrText').value = text;
+            setOcrStatus(text ? "识别完成" : "未识别到文字");
+            
+        } catch (e) {
+            console.error('OCR错误:', e);
+            setOcrStatus('识别失败');
+            alert("OCR 识别失败: " + e.message);
+        } finally {
+            toggleLoading(false);
+        }
+    }
+    
+    // 将文件转换为base64
+    function fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
         });
-        setOcrStatus("✅ 引擎初始化完成");
-        return ocrInstance;
-      } catch (e) {
-        console.error(e);
-        ocrInstance = null;
-        setOcrStatus("❌ 引擎初始化失败");
-        throw e;
-      } finally {
-        toggleLoading(false);
-      }
     }
 
-    async function fileToImageData(file) {
-      const url = URL.createObjectURL(file);
-      try {
-        const img = await new Promise((resolve, reject) => {
-          const i = new Image();
-          i.onload = () => resolve(i);
-          i.onerror = reject;
-          i.src = url;
-        });
-
-        // 画到 canvas 再取像素（Uint8ClampedArray）
-        const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth || img.width;
-        canvas.height = img.naturalHeight || img.height;
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        ctx.drawImage(img, 0, 0);
-
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        return { data: imageData.data, width: canvas.width, height: canvas.height };
-      } finally {
-        URL.revokeObjectURL(url);
-      }
+    function fillKeywordsFromOcr() {
+        const text = document.getElementById('ocrText').value.trim();
+        if (!text) return alert("没有可填入的识别内容");
+        document.getElementById('keywords').value = text;
     }
-
-    // 暴露给非 module 的按钮 onclick 使用
-    window.startOcr = async function startOcr() {
-      const input = document.getElementById('ocrFile');
-      const file = input.files && input.files[0];
-      if (!file) return alert("请先选择图片");
-
-      d
+</script>
+<script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
